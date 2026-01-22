@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
+import 'screens/login_screen.dart';
 
 void main() {
-  runApp(const MainApp());
+  runApp(const UMKMSederhanaApp());
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class UMKMSederhanaApp extends StatelessWidget {
+  const UMKMSederhanaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello World!'),
-        ),
+    return MaterialApp(
+      title: 'UMKM Sederhana',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
+        useMaterial3: true,
       ),
+      home: const LoginScreen(),
     );
   }
 }

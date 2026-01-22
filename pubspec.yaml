@@ -7,8 +7,12 @@ environment:
   sdk: ^3.7.0
 
 dependencies:
+  dio: ^5.9.0
   flutter:
     sdk: flutter
+  flutter_secure_storage: ^10.0.0
+  path_provider: ^2.1.5
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
