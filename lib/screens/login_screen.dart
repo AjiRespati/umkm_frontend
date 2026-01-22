@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:umkm_frontend/screens/dashboard_screen.dart';
+import 'package:umkm_frontend/screens/owner_dashboard_screen.dart';
 import '../services/auth_service.dart';
 import '../core/auth_storage.dart';
-import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     Navigator.pushReplacement(
       context,
+      // MaterialPageRoute(builder: (_) => const OwnerDashboardScreen()),
       MaterialPageRoute(builder: (_) => const DashboardScreen()),
     );
 
