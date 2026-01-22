@@ -1,20 +1,31 @@
-import 'package:dio/dio.dart';
 import '../core/api_client.dart';
 import '../core/auth_storage.dart';
 
 class AuthService {
   Future<bool> login(String email, String password) async {
     try {
-      final res = await apiClient.post('/auth/login', data: {
-        'email': email,
-        'password': password,
-      });
-
+      final res = await apiClient.post(
+        '/auth/login',
+        data: {'email': email, 'password': password},
+      );
       final token = res.data['token'];
       await AuthStorage.saveToken(token);
       return true;
     } catch (e) {
       print('Login error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> register(String name, String email, String password) async {
+    try {
+      final res = await apiClient.post(
+        '/auth/register',
+        data: {'name': name, 'email': email, 'password': password},
+      );
+      return res.statusCode == 201;
+    } catch (e) {
+      print('Register error: $e');
       return false;
     }
   }

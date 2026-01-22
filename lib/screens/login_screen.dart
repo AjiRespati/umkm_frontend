@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:umkm_frontend/screens/dashboard_screen.dart';
 import 'package:umkm_frontend/screens/owner_dashboard_screen.dart';
+import 'package:umkm_frontend/screens/register_screen.dart';
 import '../services/auth_service.dart';
 import '../core/auth_storage.dart';
 
@@ -21,12 +22,6 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   Future<void> _handleLogin() async {
-    Navigator.pushReplacement(
-      context,
-      // MaterialPageRoute(builder: (_) => const OwnerDashboardScreen()),
-      MaterialPageRoute(builder: (_) => const DashboardScreen()),
-    );
-
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -185,6 +180,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextButton(
                       onPressed: () async => await AuthStorage.clear(),
                       child: const Text('Clear saved token'),
+                    ),
+                    TextButton(
+                      onPressed:
+                          () => Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterScreen(),
+                            ),
+                          ),
+                      child: const Text("Don't have an account? Register"),
                     ),
                   ],
                 ),
