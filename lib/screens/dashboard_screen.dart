@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/dashboard_service.dart';
 import '../core/auth_storage.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
@@ -15,11 +16,34 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _authService = AuthService();
+  final _dashboardService = DashboardService();
 
-  // Dummy summary metrics — will later be connected to API
-  int totalProducts = 120;
-  int totalSales = 45;
-  double revenue = 3050000;
+  bool _loading = true;
+  int totalProducts = 0;
+  int totalSales = 0;
+  double revenue = 0;
+
+  Future<void> _loadData() async {
+    setState(() => _loading = true);
+    try {
+      final data = await _dashboardService.getSummary();
+      setState(() {
+        totalProducts = data['totalProducts'] ?? 0;
+        totalSales = data['totalSalesToday'] ?? 0;
+        revenue = (data['totalRevenue'] ?? 0).toDouble();
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('Dashboard fetch error: $e');
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
 
   Future<void> _logout() async {
     await _authService.logout();
@@ -41,104 +65,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('UMKM Sederhana Dashboard'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
             onPressed: _logout,
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Welcome back!',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Here’s your business summary:',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-
-            // Summary cards
-            Wrap(
-              spacing: 20,
-              runSpacing: 20,
-              alignment: WrapAlignment.start,
-              children: [
-                _buildStatCard(
-                  title: 'Total Products',
-                  value: '$totalProducts',
-                  icon: Icons.inventory_2_outlined,
-                  color: Colors.blueAccent,
-                ),
-                _buildStatCard(
-                  title: 'Sales Today',
-                  value: '$totalSales',
-                  icon: Icons.point_of_sale,
-                  color: Colors.green,
-                ),
-                _buildStatCard(
-                  title: 'Revenue',
-                  value: 'Rp ${revenue.toStringAsFixed(0)}',
-                  icon: Icons.attach_money_rounded,
-                  color: Colors.orangeAccent,
-                ),
-              ],
-            ),
-            const SizedBox(height: 40),
-
-            Text(
-              'Navigation',
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 16),
-
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: isWide ? 3 : 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: isWide ? 1.5 : 1.2,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildNavCard(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Products',
-                    color: Colors.blueAccent,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProductScreen()),
-                    ),
+                  const Text(
+                    'Welcome back!',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
-                  _buildNavCard(
-                    icon: Icons.point_of_sale,
-                    label: 'Sales',
-                    color: Colors.green,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SaleScreen()),
-                    ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Here’s your live business summary:',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
-                  _buildNavCard(
-                    icon: Icons.bar_chart,
-                    label: 'Reports',
-                    color: Colors.orangeAccent,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ReportScreen()),
+                  const SizedBox(height: 24),
+
+                  // Summary Cards
+                  Wrap(
+                    spacing: 20,
+                    runSpacing: 20,
+                    children: [
+                      _buildStatCard(
+                        title: 'Total Products',
+                        value: '$totalProducts',
+                        icon: Icons.inventory_2_outlined,
+                        color: Colors.blueAccent,
+                      ),
+                      _buildStatCard(
+                        title: 'Sales Today',
+                        value: '$totalSales',
+                        icon: Icons.point_of_sale,
+                        color: Colors.green,
+                      ),
+                      _buildStatCard(
+                        title: 'Revenue',
+                        value: 'Rp ${revenue.toStringAsFixed(0)}',
+                        icon: Icons.attach_money_rounded,
+                        color: Colors.orangeAccent,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
+                  Expanded(
+                    child: GridView.count(
+                      crossAxisCount: isWide ? 3 : 2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                      childAspectRatio: isWide ? 1.5 : 1.2,
+                      children: [
+                        _buildNavCard(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'Products',
+                          color: Colors.blueAccent,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ProductScreen()),
+                          ),
+                        ),
+                        _buildNavCard(
+                          icon: Icons.point_of_sale,
+                          label: 'Sales',
+                          color: Colors.green,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SaleScreen()),
+                          ),
+                        ),
+                        _buildNavCard(
+                          icon: Icons.bar_chart,
+                          label: 'Reports',
+                          color: Colors.orangeAccent,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const ReportScreen()),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -157,7 +176,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
@@ -180,13 +198,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: color.darken(0.1),
                   ),
                 ),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: 14,
-                  ),
-                ),
+                Text(title, style: TextStyle(color: Colors.grey[700])),
               ],
             ),
           ),
@@ -232,7 +244,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// Color utility extension
 extension ColorBrightness on Color {
   Color darken([double amount = .1]) {
     final hsl = HSLColor.fromColor(this);
