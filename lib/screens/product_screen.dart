@@ -1,7 +1,9 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../models/product.dart';
+
 import '../services/product_service.dart';
 
 class ProductScreen extends StatefulWidget {
@@ -12,11 +14,11 @@ class ProductScreen extends StatefulWidget {
 }
 
 class _ProductScreenState extends State<ProductScreen> {
-  final ProductService _service = ProductService();
+  final ProductService _productService = ProductService();
   final ImagePicker _picker = ImagePicker();
 
-  List<Product> _products = [];
   bool _loading = true;
+  List<Map<String, dynamic>> _products = [];
 
   @override
   void initState() {
@@ -27,185 +29,260 @@ class _ProductScreenState extends State<ProductScreen> {
   Future<void> _loadProducts() async {
     setState(() => _loading = true);
     try {
-      final list = await _service.fetchProducts();
-      setState(() {
-        _products = list;
-        _loading = false;
-      });
+      _products = await _productService.fetchProducts();
     } catch (e) {
-      debugPrint('Error loading products: $e');
-      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load products: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _addProductDialog() async {
-    final nameCtrl = TextEditingController();
-    final stockCtrl = TextEditingController();
-    final priceCtrl = TextEditingController();
-    File? selectedImage;
+  void _showProductDialog({Map<String, dynamic>? product}) {
+    final nameController = TextEditingController(text: product?['name'] ?? '');
+    final priceController = TextEditingController(
+      text: product?['price']?.toString() ?? '',
+    );
+    final stockController = TextEditingController(
+      text: product?['stock']?.toString() ?? '',
+    );
 
-    await showDialog(
+    File? selectedImage;
+    Uint8List? webImageBytes;
+
+    showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add Product'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Product Name'),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: Text(product == null ? 'Add Product' : 'Edit Product'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await _picker.pickImage(
+                          source: ImageSource.gallery,
+                        );
+                        if (picked != null) {
+                          if (kIsWeb) {
+                            final bytes = await picked.readAsBytes();
+                            setModalState(() {
+                              webImageBytes = bytes;
+                            });
+                          } else {
+                            setModalState(() {
+                              selectedImage = File(picked.path);
+                            });
+                          }
+                        }
+                      },
+                      child: Container(
+                        height: 160,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.grey[200],
+                          border: Border.all(color: Colors.grey),
+                        ),
+                        child:
+                            kIsWeb && webImageBytes != null
+                                ? Image.memory(
+                                  webImageBytes!,
+                                  fit: BoxFit.cover,
+                                )
+                                : selectedImage != null
+                                ? Image.file(selectedImage!, fit: BoxFit.cover)
+                                : product?['imageUrl'] != null
+                                ? Image.network(
+                                  'http://localhost:3000${product!['imageUrl']}',
+                                  fit: BoxFit.cover,
+                                )
+                                : const Center(
+                                  child: Text('Tap to select image'),
+                                ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Product Name',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: priceController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Price'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: stockController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Stock'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: stockCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Stock'),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: priceCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Price'),
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () async {
-                    final picked = await _picker.pickImage(source: ImageSource.gallery);
-                    if (picked != null) {
-                      setState(() => selectedImage = File(picked.path));
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final price = double.tryParse(priceController.text) ?? 0;
+                    final stock = int.tryParse(stockController.text) ?? 0;
+
+                    if (name.isEmpty || price <= 0 || stock < 0) return;
+
+                    if (product == null) {
+                      await _productService.createProduct(
+                        name: name,
+                        price: price,
+                        stock: stock,
+                        image: selectedImage,
+                        webImageBytes: webImageBytes,
+                      );
+                    } else {
+                      await _productService.updateProduct(
+                        id: product['id'],
+                        name: name,
+                        price: price,
+                        stock: stock,
+                        image: selectedImage,
+                        webImageBytes: webImageBytes,
+                      );
+                    }
+
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _loadProducts();
                     }
                   },
-                  child: Container(
-                    height: 150,
-                    width: double.infinity,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: selectedImage == null
-                        ? const Text('Tap to select image')
-                        : Image.file(selectedImage!, fit: BoxFit.cover),
-                  ),
+                  child: const Text('Save'),
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final stock = int.tryParse(stockCtrl.text) ?? 0;
-                final price = double.tryParse(priceCtrl.text) ?? 0;
-                if (name.isEmpty || stock <= 0 || price <= 0) return;
-
-                await _service.addProduct(name, price, stock, selectedImage);
-                if (!mounted) return;
-                Navigator.pop(context);
-                await _loadProducts();
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Future<void> _deleteProduct(Product p) async {
-    await _service.deleteProduct(p.id);
-    await _loadProducts();
+  Future<void> _deleteProduct(int id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete Product'),
+            content: const Text(
+              'Are you sure you want to delete this product?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirm == true) {
+      await _productService.deleteProduct(id);
+      _loadProducts();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 700;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Products'),
         actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadProducts),
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadProducts,
+            icon: const Icon(Icons.add),
+            onPressed: () => _showProductDialog(),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addProductDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Product'),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _products.isEmpty
-              ? const Center(child: Text('No products available.'))
-              : Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: GridView.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: isWide ? 3 : 2,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: isWide ? 1.4 : 0.9,
-                    ),
-                    itemCount: _products.length,
-                    itemBuilder: (context, i) {
-                      final p = _products[i];
-                      return Card(
-                        elevation: 3,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: p.imageUrl != null
-                                    ? Image.network(
-                                        p.imageUrl!,
-                                        fit: BoxFit.cover,
-                                        width: double.infinity,
-                                      )
-                                    : Container(
-                                        color: Colors.grey[200],
-                                        child: const Icon(Icons.image_not_supported),
-                                      ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                p.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text('Stock: ${p.stock}'),
-                              Text('Rp ${p.price.toStringAsFixed(0)}'),
-                              const SizedBox(height: 8),
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _products.isEmpty
+              ? const Center(child: Text('No products found'))
+              : SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('ID')),
+                    DataColumn(label: Text('Product')),
+                    DataColumn(label: Text('Price')),
+                    DataColumn(label: Text('Stock')),
+                    DataColumn(label: Text('Actions')),
+                  ],
+                  rows:
+                      _products.map((p) {
+                        return DataRow(
+                          cells: [
+                            DataCell(Text('${p['id']}')),
+                            DataCell(
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (p['imageUrl'] != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: Image.network(
+                                        'http://localhost:3000${p['imageUrl']}',
+                                        width: 40,
+                                        height: 40,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  Text(p['name'] ?? ''),
+                                ],
+                              ),
+                            ),
+                            DataCell(Text('Rp ${p['price']}')),
+                            DataCell(Text('${p['stock']}')),
+                            DataCell(
+                              Row(
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                    onPressed: () => _deleteProduct(p),
+                                    icon: const Icon(
+                                      Icons.edit,
+                                      color: Colors.blueAccent,
+                                    ),
+                                    onPressed:
+                                        () => _showProductDialog(product: p),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: () => _deleteProduct(p['id']),
                                   ),
                                 ],
-                              )
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
                 ),
+              ),
     );
   }
 }

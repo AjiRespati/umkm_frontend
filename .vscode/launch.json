@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "frontend",
+      "request": "launch",
+      "type": "dart",
+      // "args": ["-d", "chrome", "--web-port", "2222", "--wasm"]
+      "args": [ "-d", "chrome", "--web-port", "2222"]
+    }
+  ]
+}
