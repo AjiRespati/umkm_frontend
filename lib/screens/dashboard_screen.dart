@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:umkm_frontend/screens/owner_dashboard_screen.dart';
 import '../services/dashboard_service.dart';
-import '../core/auth_storage.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 import 'product_screen.dart';
@@ -65,99 +65,115 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('UMKM Sederhana Dashboard'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const OwnerDashboardScreen()),
+              );
+            },
+            icon: Icon(Icons.graphic_eq),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Welcome back!',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Here’s your live business summary:',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 24),
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome back!',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Here’s your live business summary:',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
 
-                  // Summary Cards
-                  Wrap(
-                    spacing: 20,
-                    runSpacing: 20,
-                    children: [
-                      _buildStatCard(
-                        title: 'Total Products',
-                        value: '$totalProducts',
-                        icon: Icons.inventory_2_outlined,
-                        color: Colors.blueAccent,
-                      ),
-                      _buildStatCard(
-                        title: 'Sales Today',
-                        value: '$totalSales',
-                        icon: Icons.point_of_sale,
-                        color: Colors.green,
-                      ),
-                      _buildStatCard(
-                        title: 'Revenue',
-                        value: 'Rp ${revenue.toStringAsFixed(0)}',
-                        icon: Icons.attach_money_rounded,
-                        color: Colors.orangeAccent,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-                  Expanded(
-                    child: GridView.count(
-                      crossAxisCount: isWide ? 3 : 2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: isWide ? 1.5 : 1.2,
+                    // Summary Cards
+                    Wrap(
+                      spacing: 20,
+                      runSpacing: 20,
                       children: [
-                        _buildNavCard(
+                        _buildStatCard(
+                          title: 'Total Products',
+                          value: '$totalProducts',
                           icon: Icons.inventory_2_outlined,
-                          label: 'Products',
                           color: Colors.blueAccent,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ProductScreen()),
-                          ),
                         ),
-                        _buildNavCard(
+                        _buildStatCard(
+                          title: 'Sales Today',
+                          value: '$totalSales',
                           icon: Icons.point_of_sale,
-                          label: 'Sales',
                           color: Colors.green,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SaleScreen()),
-                          ),
                         ),
-                        _buildNavCard(
-                          icon: Icons.bar_chart,
-                          label: 'Reports',
+                        _buildStatCard(
+                          title: 'Revenue',
+                          value: 'Rp ${revenue.toStringAsFixed(0)}',
+                          icon: Icons.attach_money_rounded,
                           color: Colors.orangeAccent,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const ReportScreen()),
-                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 40),
+                    Expanded(
+                      child: GridView.count(
+                        crossAxisCount: isWide ? 3 : 2,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: isWide ? 1.5 : 1.2,
+                        children: [
+                          _buildNavCard(
+                            icon: Icons.inventory_2_outlined,
+                            label: 'Products',
+                            color: Colors.blueAccent,
+                            onTap:
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ProductScreen(),
+                                  ),
+                                ),
+                          ),
+                          _buildNavCard(
+                            icon: Icons.point_of_sale,
+                            label: 'Sales',
+                            color: Colors.green,
+                            onTap:
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const SaleScreen(),
+                                  ),
+                                ),
+                          ),
+                          _buildNavCard(
+                            icon: Icons.bar_chart,
+                            label: 'Reports',
+                            color: Colors.orangeAccent,
+                            onTap:
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ReportScreen(),
+                                  ),
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
     );
   }
 
@@ -235,7 +251,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
-              )
+              ),
             ],
           ),
         ),

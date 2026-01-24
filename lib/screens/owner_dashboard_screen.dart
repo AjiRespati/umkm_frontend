@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import '../services/product_service.dart';
-import '../services/sale_service.dart';
+
+import '../services/report_service.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -11,76 +12,64 @@ class OwnerDashboardScreen extends StatefulWidget {
 }
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
-  final _productService = ProductService();
-  final _saleService = SaleService();
+  final ReportService _reportService = ReportService();
 
   bool _loading = true;
-  List<Map<String, dynamic>> _salesData = [];
+
+  List<_DailySales> _dailyData = [];
+  List<_MonthlySales> _monthlyData = [];
+
   List<Map<String, dynamic>> _lowStock = [];
-  List<Map<String, dynamic>> _highTransactions = [];
-  double _totalRevenue = 0;
+  List<Map<String, dynamic>> _largeSales = [];
 
   @override
   void initState() {
     super.initState();
-    _loadAnalytics();
+    _loadDashboard();
   }
 
-  Future<void> _loadAnalytics() async {
+  Future<void> _loadDashboard() async {
     setState(() => _loading = true);
-
     try {
-      final products = await _productService.fetchProducts();
-      final sales = await _saleService.getSales();
+      final daily = await _reportService.fetchDailySales();
+      final monthly = await _reportService.fetchMonthlySales();
+      final lowStock = await _reportService.fetchLowStock();
+      final largeSales = await _reportService.fetchLargeSales();
 
-      // Low stock (less than 5 units)
-      final lowStock = products
-          .where((p) => p.stock <= 5)
-          .map((p) => {
-                'name': p.name,
-                'stock': p.stock,
-              })
-          .toList();
+      _dailyData =
+          daily.map((e) {
+            return _DailySales(
+              DateTime.parse(e['date']).toLocal(),
+              double.parse(e['total'].toString()),
+            );
+          }).toList();
 
-      // Prepare chart data
-      final grouped = <String, double>{};
-      double totalRevenue = 0;
+      _monthlyData =
+          monthly.map((e) {
+            return _MonthlySales(
+              DateTime.parse(e['month']).toLocal(),
+              double.parse(e['total'].toString()),
+            );
+          }).toList();
 
-      for (final s in sales) {
-        final date = DateTime.parse(s['date']).toLocal();
-        final day = '${date.year}-${date.month}-${date.day}';
-        grouped[day] = (grouped[day] ?? 0) + (s['total'] as num).toDouble();
-        totalRevenue += (s['total'] as num).toDouble();
-      }
-
-      // Large transactions (Rp > 500,000)
-      final bigSales = sales
-          .where((s) => (s['total'] as num).toDouble() > 500000)
-          .map((s) => ({
-                'id': s['id'],
-                'total': s['total'],
-                'date': s['date'],
-              }))
-          .toList();
-
-      setState(() {
-        _lowStock = lowStock;
-        _highTransactions = bigSales;
-        _salesData = grouped.entries
-            .map((e) => {'date': e.key, 'total': e.value})
-            .toList();
-        _totalRevenue = totalRevenue;
-        _loading = false;
-      });
-    } catch (e) {
-      debugPrint('Error loading analytics: $e');
-      setState(() => _loading = false);
+      _lowStock = lowStock;
+      _largeSales = largeSales;
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 800;
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final bool hasDaily = _dailyData.isNotEmpty;
+    final bool isSingleDailyPoint = _dailyData.length == 1;
+
+    final DateTime? minDailyDate = hasDaily ? _dailyData.first.date : null;
+    final DateTime? maxDailyDate = hasDaily ? _dailyData.last.date : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -88,165 +77,157 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Data',
-            onPressed: _loadAnalytics,
+            onPressed: _loadDashboard,
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: isWide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: _buildChartSection()),
-                        const SizedBox(width: 20),
-                        Expanded(flex: 2, child: _buildSidebar()),
-                      ],
-                    )
-                  : SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          _buildChartSection(),
-                          const SizedBox(height: 20),
-                          _buildSidebar(),
-                        ],
-                      ),
-                    ),
-            ),
-    );
-  }
-
-  Widget _buildChartSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Sales Overview',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Total Revenue: Rp ${_totalRevenue.toStringAsFixed(0)}',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 300,
-              child: SfCartesianChart(
-                primaryXAxis: CategoryAxis(),
+            // =========================
+            // DAILY REVENUE
+            // =========================
+            if (hasDaily)
+              SfCartesianChart(
+                title: ChartTitle(text: 'Daily Revenue (Last 7 Days)'),
                 tooltipBehavior: TooltipBehavior(enable: true),
-                series: <ChartSeries>[
-                  ColumnSeries<Map<String, dynamic>, String>(
-                    dataSource: _salesData,
-                    xValueMapper: (data, _) => data['date'],
-                    yValueMapper: (data, _) => data['total'],
-                    color: Colors.blueAccent,
-                    borderRadius: const BorderRadius.all(Radius.circular(8)),
-                    dataLabelSettings: const DataLabelSettings(isVisible: true),
-                  )
+                primaryXAxis: DateTimeAxis(
+                  minimum: minDailyDate!.subtract(const Duration(days: 1)),
+                  maximum: maxDailyDate!.add(const Duration(days: 1)),
+                  intervalType: DateTimeIntervalType.days,
+                  interval: 1,
+                  dateFormat: DateFormat.Md(),
+                ),
+                primaryYAxis: NumericAxis(labelFormat: 'Rp {value}'),
+                series: <CartesianSeries<_DailySales, DateTime>>[
+                  isSingleDailyPoint
+                      ? ColumnSeries<_DailySales, DateTime>(
+                        dataSource: _dailyData,
+                        xValueMapper: (d, _) => d.date,
+                        yValueMapper: (d, _) => d.total,
+                        dataLabelSettings: const DataLabelSettings(
+                          isVisible: true,
+                        ),
+                      )
+                      : LineSeries<_DailySales, DateTime>(
+                        dataSource: _dailyData,
+                        xValueMapper: (d, _) => d.date,
+                        yValueMapper: (d, _) => d.total,
+                        markerSettings: const MarkerSettings(isVisible: true),
+                        dataLabelSettings: const DataLabelSettings(
+                          isVisible: true,
+                        ),
+                      ),
                 ],
               ),
+
+            const SizedBox(height: 48),
+
+            // =========================
+            // MONTHLY REVENUE
+            // =========================
+            SfCartesianChart(
+              title: ChartTitle(text: 'Monthly Revenue'),
+              tooltipBehavior: TooltipBehavior(enable: true),
+              primaryXAxis: DateTimeAxis(
+                intervalType: DateTimeIntervalType.months,
+                dateFormat: DateFormat.yMMM(),
+              ),
+              primaryYAxis: NumericAxis(labelFormat: 'Rp {value}'),
+              series: <CartesianSeries<_MonthlySales, DateTime>>[
+                ColumnSeries<_MonthlySales, DateTime>(
+                  dataSource: _monthlyData,
+                  xValueMapper: (d, _) => d.month,
+                  yValueMapper: (d, _) => d.total,
+                  dataLabelSettings: const DataLabelSettings(isVisible: true),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _buildSidebar() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildLowStockCard(),
-        const SizedBox(height: 20),
-        _buildHighTransactionCard(),
-      ],
-    );
-  }
+            const SizedBox(height: 48),
 
-  Widget _buildLowStockCard() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+            // =========================
+            // LOW STOCK ALERTS
+            // =========================
             const Text(
               'Low Stock Alerts',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            _lowStock.isEmpty
-                ? const Text('All products sufficiently stocked.')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _lowStock.length,
-                    itemBuilder: (context, i) {
-                      final item = _lowStock[i];
-                      return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.warning, color: Colors.orange),
-                        title: Text(item['name']),
-                        trailing: Text('Stock: ${item['stock']}'),
-                      );
-                    },
-                  ),
-          ],
-        ),
-      ),
-    );
-  }
+            const SizedBox(height: 12),
 
-  Widget _buildHighTransactionCard() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+            if (_lowStock.isEmpty)
+              const Text('All products are sufficiently stocked.')
+            else
+              Column(
+                children:
+                    _lowStock.map((p) {
+                      return ListTile(
+                        leading: const Icon(
+                          Icons.warning,
+                          color: Colors.orange,
+                        ),
+                        title: Text(p['name']),
+                        trailing: Text('Stock: ${p['stock']}'),
+                      );
+                    }).toList(),
+              ),
+
+            const SizedBox(height: 48),
+
+            // =========================
+            // LARGE TRANSACTIONS
+            // =========================
             const Text(
               'Large Transactions',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            _highTransactions.isEmpty
-                ? const Text('No high-value transactions recorded.')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _highTransactions.length,
-                    itemBuilder: (context, i) {
-                      final tx = _highTransactions[i];
+            const SizedBox(height: 12),
+
+            if (_largeSales.isEmpty)
+              const Text('No large transactions detected.')
+            else
+              Column(
+                children:
+                    _largeSales.map((s) {
                       return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.attach_money,
-                            color: Colors.green),
-                        title: Text('Rp ${tx['total'].toStringAsFixed(0)}'),
+                        leading: const Icon(
+                          Icons.attach_money,
+                          color: Colors.green,
+                        ),
+                        title: Text('Sale #${s['id']}'),
                         subtitle: Text(
-                          DateTime.parse(tx['date'])
-                              .toLocal()
-                              .toString()
-                              .split('.')[0],
+                          DateTime.parse(s['created_at']).toLocal().toString(),
+                        ),
+                        trailing: Text(
+                          'Rp ${s['total']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       );
-                    },
-                  ),
+                    }).toList(),
+              ),
           ],
         ),
       ),
     );
   }
+}
+
+// =========================
+// DATA CLASSES
+// =========================
+
+class _DailySales {
+  final DateTime date;
+  final double total;
+
+  _DailySales(this.date, this.total);
+}
+
+class _MonthlySales {
+  final DateTime month;
+  final double total;
+
+  _MonthlySales(this.month, this.total);
 }

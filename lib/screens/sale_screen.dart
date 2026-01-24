@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/product.dart';
+import 'package:umkm_frontend/screens/sales_history_screen.dart';
+
 import '../services/product_service.dart';
 import '../services/sale_service.dart';
 
@@ -11,53 +12,40 @@ class SaleScreen extends StatefulWidget {
 }
 
 class _SaleScreenState extends State<SaleScreen> {
-  final _productService = ProductService();
-  final _saleService = SaleService();
+  final ProductService _productService = ProductService();
+  final SaleService _saleService = SaleService();
 
-  List<Product> _products = [];
-  Product? _selectedProduct;
-  final _qtyController = TextEditingController();
   bool _loading = true;
   bool _submitting = false;
-  List<Map<String, dynamic>> _salesHistory = [];
+
+  List<Map<String, dynamic>> _products = [];
+  Map<String, dynamic>? _selectedProduct;
+
+  final TextEditingController _qtyController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadProducts();
-    _loadSales();
   }
 
   Future<void> _loadProducts() async {
+    setState(() => _loading = true);
     try {
-      final data = await _productService.fetchProducts();
-      setState(() {
-        _products = data;
-        _loading = false;
-      });
+      _products = await _productService.fetchProducts();
     } catch (e) {
-      debugPrint('Error loading products: $e');
-      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load products: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadSales() async {
-    try {
-      final sales = await _saleService.getSales();
-      setState(() => _salesHistory = sales);
-    } catch (e) {
-      debugPrint('Error loading sales: $e');
-    }
-  }
-
-  double _calculateTotal() {
-    final qty = int.tryParse(_qtyController.text) ?? 0;
-    final price = _selectedProduct?.price ?? 0;
-    return qty * price;
-  }
-
-  Future<void> _recordSale() async {
-    if (_selectedProduct == null || _qtyController.text.isEmpty) return;
+  Future<void> _submitSale() async {
+    if (_selectedProduct == null) return;
 
     final qty = int.tryParse(_qtyController.text) ?? 0;
     if (qty <= 0) return;
@@ -65,204 +53,155 @@ class _SaleScreenState extends State<SaleScreen> {
     setState(() => _submitting = true);
 
     try {
-      await _saleService.recordSale(_selectedProduct!.id, qty);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sale recorded successfully!')),
+      await _saleService.createSale(
+        productId: _selectedProduct!['id'],
+        qty: qty,
       );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sale recorded successfully')),
+      );
+
       _qtyController.clear();
-      setState(() => _selectedProduct = null);
+      _selectedProduct = null;
+
       await _loadProducts();
-      await _loadSales();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error recording sale: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sale failed: $e')));
     } finally {
-      setState(() => _submitting = false);
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 700;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sales'),
+        title: const Text('New Sale'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadSales,
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SalesHistoryScreen()),
+              );
+            },
           ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadProducts),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: isWide
-                  ? Row(
-                      children: [
-                        Expanded(flex: 2, child: _buildSaleForm()),
-                        const SizedBox(width: 20),
-                        Expanded(flex: 3, child: _buildSalesHistory()),
-                      ],
-                    )
-                  : SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          _buildSaleForm(),
-                          const SizedBox(height: 24),
-                          _buildSalesHistory(),
-                        ],
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Create Sale',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-            ),
-    );
-  }
+                    const SizedBox(height: 24),
 
-  Widget _buildSaleForm() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Record Sale',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-
-            DropdownButtonFormField<Product>(
-              value: _selectedProduct,
-              decoration: InputDecoration(
-                labelText: 'Select Product',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: _products
-                  .map((p) => DropdownMenuItem(
-                        value: p,
-                        child: Text('${p.name} (Stock: ${p.stock})'),
-                      ))
-                  .toList(),
-              onChanged: (p) => setState(() => _selectedProduct = p),
-            ),
-            const SizedBox(height: 16),
-
-            TextFormField(
-              controller: _qtyController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Quantity',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.numbers_outlined),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 16),
-
-            if (_selectedProduct != null && _qtyController.text.isNotEmpty)
-              Text(
-                'Total: Rp ${_calculateTotal().toStringAsFixed(0)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blueAccent,
-                ),
-              ),
-
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _submitting ? null : _recordSale,
-                icon: _submitting
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.check),
-                label: const Text('Record Sale'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: Colors.green,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSalesHistory() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Recent Sales',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            _salesHistory.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Text('No sales recorded yet.'),
-                    ),
-                  )
-                : SizedBox(
-                    height: 400,
-                    child: ListView.separated(
-                      itemCount: _salesHistory.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 10, color: Colors.grey),
-                      itemBuilder: (context, i) {
-                        final s = _salesHistory[i];
-                        return ListTile(
-                          leading: const Icon(Icons.receipt_long),
-                          title: Text(
-                            'Product ID: ${s['product_id']}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            'Qty: ${s['qty']} | Total: Rp ${s['total']}',
-                          ),
-                          trailing: Text(
-                            s['date'] != null
-                                ? DateTime.parse(s['date'])
-                                    .toLocal()
-                                    .toString()
-                                    .split('.')[0]
-                                : '',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        );
+                    DropdownButtonFormField<Map<String, dynamic>>(
+                      value: _selectedProduct,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Product',
+                        border: OutlineInputBorder(),
+                      ),
+                      items:
+                          _products.map((product) {
+                            return DropdownMenuItem(
+                              value: product,
+                              child: Row(
+                                children: [
+                                  if (product['imageUrl'] != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: Image.network(
+                                        'http://localhost:3000${product['imageUrl']}',
+                                        width: 32,
+                                        height: 32,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  Text(
+                                    '${product['name']} (Stock: ${product['stock']})',
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedProduct = value;
+                        });
                       },
                     ),
-                  ),
-          ],
-        ),
-      ),
+
+                    const SizedBox(height: 20),
+
+                    TextField(
+                      controller: _qtyController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Quantity',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    if (_selectedProduct != null)
+                      Text(
+                        'Price: Rp ${_selectedProduct!['price']}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+
+                    if (_selectedProduct != null)
+                      Text(
+                        'Total: Rp ${(int.tryParse(_qtyController.text) ?? 0) * _selectedProduct!['price']}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                    const SizedBox(height: 32),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _submitting ? null : _submitSale,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child:
+                            _submitting
+                                ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                : const Text(
+                                  'Confirm Sale',
+                                  style: TextStyle(fontSize: 18),
+                                ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
     );
   }
 }

@@ -1,12 +1,18 @@
 import '../core/api_client.dart';
 
 class SaleService {
-  Future<void> recordSale(int productId, int qty) async {
-    await apiClient.post('/sales', data: {'product_id': productId, 'qty': qty});
+  Future<void> createSale({
+    required int productId,
+    required int qty,
+  }) async {
+    await apiClient.post('/sales', data: {
+      'productId': productId,
+      'qty': qty,
+    });
   }
 
-  Future<List<dynamic>> getSales() async {
+  Future<List<Map<String, dynamic>>> fetchSales() async {
     final res = await apiClient.get('/sales');
-    return res.data;
+    return List<Map<String, dynamic>>.from(res.data);
   }
 }
