@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:umkm_frontend/services/export_service.dart';
 
 import '../services/report_service.dart';
 
@@ -59,6 +60,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     }
   }
 
+  final exportService = getExportService();
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -207,6 +209,19 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       );
                     }).toList(),
               ),
+            ElevatedButton.icon(
+              onPressed: () => exportService.exportSales(),
+              icon: const Icon(Icons.download),
+              label: const Text('Export Sales (Excel)'),
+            ),
+
+            const SizedBox(height: 12),
+
+            ElevatedButton.icon(
+              onPressed: () => exportService.exportProducts(),
+              icon: const Icon(Icons.download),
+              label: const Text('Export Products (Excel)'),
+            ),
           ],
         ),
       ),
