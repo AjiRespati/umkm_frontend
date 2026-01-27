@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import '../services/report_service.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -9,230 +11,173 @@ class ReportScreen extends StatefulWidget {
 }
 
 class _ReportScreenState extends State<ReportScreen> {
-  final _reportService = ReportService();
+  final ReportService _reportService = ReportService();
 
-  String _type = 'daily';
-  bool _loading = false;
-  String? _fileUrl;
-  double _revenue = 0;
-  List<Map<String, dynamic>> _history = [];
+  bool _loading = true;
 
-  Future<void> _generateReport() async {
-    setState(() {
-      _loading = true;
-      _fileUrl = null;
-    });
-
-    try {
-      final data = await _reportService.generateReport(_type);
-      setState(() {
-        _fileUrl = data['file'];
-        _revenue = data['totalRevenue'];
-        _history.insert(0, {
-          'type': _type,
-          'file': data['file'],
-          'total': _revenue,
-          'timestamp': DateTime.now().toString(),
-        });
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error generating report: $e')),
-      );
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _downloadFile() async {
-    if (_fileUrl != null) {
-      await _reportService.downloadReport(_fileUrl!);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report downloaded successfully!')),
-      );
-    }
-  }
+  List<dynamic> _dailySales = [];
+  List<dynamic> _monthlySales = [];
+  List<dynamic> _lowStock = [];
+  List<dynamic> _largeSales = [];
 
   @override
-  Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 700;
+  void initState() {
+    super.initState();
+    _loadReports();
+  }
 
+  Future<void> _loadReports() async {
+    setState(() => _loading = true);
+    try {
+      _dailySales = await _reportService.getDailySales();
+      _monthlySales = await _reportService.getMonthlySales();
+      _lowStock = await _reportService.getLowStockAlerts();
+      _largeSales = await _reportService.getLargeSalesAlerts();
+    } catch (_) {
+      _showSnack('Failed to load reports');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
+
+  // =============================
+  // UI HELPERS
+  // =============================
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  // =============================
+  // UI
+  // =============================
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reports'),
         actions: [
           IconButton(
-            onPressed: _generateReport,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Generate report',
+            onPressed: _loadReports,
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: isWide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadReports,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
-                  Expanded(flex: 2, child: _buildGenerateSection()),
-                  const SizedBox(width: 20),
-                  Expanded(flex: 3, child: _buildHistorySection()),
-                ],
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  children: [
-                    _buildGenerateSection(),
-                    const SizedBox(height: 20),
-                    _buildHistorySection(),
-                  ],
-                ),
-              ),
-      ),
-    );
-  }
+                  // =====================
+                  // DAILY SALES
+                  // =====================
+                  _sectionTitle('Daily Sales'),
+                  if (_dailySales.isEmpty)
+                    const Text('No sales today')
+                  else
+                    Column(
+                      children: _dailySales.map((d) {
+                        return ListTile(
+                          leading: const Icon(Icons.today),
+                          title: Text(
+                            DateFormat('dd MMM yyyy')
+                                .format(DateTime.parse(d['date'])),
+                          ),
+                          trailing: Text(
+                            'Rp ${d['total']}',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }).toList(),
+                    ),
 
-  Widget _buildGenerateSection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Generate Report',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              value: _type,
-              decoration: InputDecoration(
-                labelText: 'Report Type',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'daily', child: Text('Daily Report')),
-                DropdownMenuItem(value: 'monthly', child: Text('Monthly Report')),
-              ],
-              onChanged: (val) => setState(() => _type = val ?? 'daily'),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: _loading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.analytics_outlined),
-                label: const Text('Generate Report'),
-                onPressed: _loading ? null : _generateReport,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (_fileUrl != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Revenue: Rp ${_revenue.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueAccent,
+                  // =====================
+                  // MONTHLY SALES
+                  // =====================
+                  _sectionTitle('Monthly Sales'),
+                  if (_monthlySales.isEmpty)
+                    const Text('No sales this month')
+                  else
+                    Column(
+                      children: _monthlySales.map((m) {
+                        return ListTile(
+                          leading: const Icon(Icons.calendar_month),
+                          title: Text(
+                            DateFormat('MMMM yyyy')
+                                .format(DateTime.parse(m['month']?? '2026-01-01')),
+                          ),
+                          trailing: Text(
+                            'Rp ${m['total']}',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    onPressed: _downloadFile,
-                    icon: const Icon(Icons.download),
-                    label: const Text('Download Excel'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+
+                  // =====================
+                  // LOW STOCK ALERTS
+                  // =====================
+                  _sectionTitle('Low Stock Alerts'),
+                  if (_lowStock.isEmpty)
+                    const Text('No low stock products 🎉')
+                  else
+                    Column(
+                      children: _lowStock.map((p) {
+                        return ListTile(
+                          leading: const Icon(Icons.warning,
+                              color: Colors.orange),
+                          title: Text(p['name']),
+                          trailing: Text(
+                            'Stock: ${p['stock']}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  ),
+
+                  // =====================
+                  // LARGE SALES ALERTS
+                  // =====================
+                  _sectionTitle('Large Transactions'),
+                  if (_largeSales.isEmpty)
+                    const Text('No large transactions')
+                  else
+                    Column(
+                      children: _largeSales.map((s) {
+                        return ListTile(
+                          leading: const Icon(Icons.attach_money,
+                              color: Colors.green),
+                          title: Text('Rp ${s['total']}'),
+                          subtitle: Text(
+                            DateFormat('dd MMM yyyy HH:mm')
+                                .format(DateTime.parse(s['created_at'])),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                 ],
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHistorySection() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Report History',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
-            _history.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text('No reports generated yet.'),
-                    ),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _history.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 20, color: Colors.grey),
-                    itemBuilder: (context, i) {
-                      final item = _history[i];
-                      return ListTile(
-                        leading: Icon(
-                          item['type'] == 'daily'
-                              ? Icons.calendar_today
-                              : Icons.date_range,
-                          color: Colors.blueAccent,
-                        ),
-                        title: Text(
-                          '${item['type'].toString().toUpperCase()} REPORT',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          'Revenue: Rp ${item['total'].toStringAsFixed(0)}',
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.download),
-                          onPressed: () =>
-                              _reportService.downloadReport(item['file']),
-                        ),
-                      );
-                    },
-                  ),
-          ],
-        ),
-      ),
     );
   }
 }
