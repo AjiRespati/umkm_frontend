@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:umkm_frontend/screens/dashboard_screen.dart';
-import 'package:umkm_frontend/screens/owner_dashboard_screen.dart';
-import 'package:umkm_frontend/screens/register_screen.dart';
+import 'package:dio/dio.dart';
+
 import '../services/auth_service.dart';
-import '../core/auth_storage.dart';
+import 'dashboard_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,11 +14,13 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _authService = AuthService();
 
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
   bool _loading = false;
+  bool _obscurePassword = true;
   String? _error;
 
   Future<void> _handleLogin() async {
@@ -29,30 +31,44 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
-    final success = await _authService.login(
-      _emailController.text.trim(),
-      _passwordController.text.trim(),
-    );
-
-    setState(() => _loading = false);
-
-    if (success) {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
+    try {
+      final success = await _authService.login(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
       );
-    } else {
+
+      if (!mounted) return;
+
+      if (success) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        );
+      } else {
+        setState(() {
+          _error = 'Email or password is incorrect';
+        });
+      }
+    } on DioException catch (e) {
       setState(() {
-        _error = 'Invalid credentials. Please check your email or password.';
+        if (e.type == DioExceptionType.connectionError) {
+          _error = 'Unable to connect. Check your internet.';
+        } else {
+          _error = 'Login failed. Please try again.';
+        }
       });
+    } catch (_) {
+      setState(() {
+        _error = 'Something went wrong. Please try again.';
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    final isWide = width > 600;
+    final isWide = MediaQuery.of(context).size.width > 600;
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -64,8 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             margin: EdgeInsets.symmetric(
-              horizontal: isWide ? width * 0.3 : 24,
-              vertical: 40,
+              horizontal: isWide ? MediaQuery.of(context).size.width * 0.3 : 24,
             ),
             child: Padding(
               padding: const EdgeInsets.all(24),
@@ -81,24 +96,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'UMKM Sederhana',
+                      'UMKM Login',
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
                         color: Colors.blueAccent,
                       ),
                     ),
                     const SizedBox(height: 24),
 
-                    // Email field
+                    // Email
                     TextFormField(
                       controller: _emailController,
+                      enabled: !_loading,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         labelText: 'Email',
+                        prefixIcon: const Icon(Icons.email_outlined),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -112,31 +129,43 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Password field
+                    // Password
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
+                      enabled: !_loading,
+                      obscureText: _obscurePassword,
                       decoration: InputDecoration(
                         labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed:
+                              () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        prefixIcon: const Icon(Icons.lock_outline),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Password is required';
                         }
                         if (value.length < 6) {
-                          return 'Minimum 6 characters required';
+                          return 'Minimum 6 characters';
                         }
                         return null;
                       },
+                      onFieldSubmitted: (_) => _handleLogin(),
                     ),
-
                     const SizedBox(height: 24),
 
-                    // Login button
+                    // Login Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -151,8 +180,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         child:
                             _loading
                                 ? const SizedBox(
-                                  height: 20,
                                   width: 20,
+                                  height: 20,
                                   child: CircularProgressIndicator(
                                     color: Colors.white,
                                     strokeWidth: 2,
@@ -161,13 +190,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : const Text(
                                   'Login',
                                   style: TextStyle(
-                                    fontSize: 18,
                                     fontWeight: FontWeight.bold,
+                                    fontSize: 18,
                                   ),
                                 ),
                       ),
                     ),
-
                     const SizedBox(height: 12),
 
                     if (_error != null)
@@ -175,21 +203,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         _error!,
                         style: const TextStyle(color: Colors.red, fontSize: 14),
                       ),
+                    const SizedBox(height: 12),
 
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () async => await AuthStorage.clear(),
-                      child: const Text('Clear saved token'),
-                    ),
                     TextButton(
                       onPressed:
-                          () => Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const RegisterScreen(),
-                            ),
-                          ),
-                      child: const Text("Don't have an account? Register"),
+                          _loading
+                              ? null
+                              : () {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const RegisterScreen(),
+                                  ),
+                                );
+                              },
+                      child: const Text('Don’t have an account? Register'),
                     ),
                   ],
                 ),
