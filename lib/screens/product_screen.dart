@@ -30,17 +30,20 @@ class _ProductScreenState extends State<ProductScreen> {
     setState(() => _loading = true);
     try {
       _products = await _productService.fetchProducts();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load products: $e')));
-      }
+    } catch (_) {
+      _showSnack('Failed to load products');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // =============================
+  // ADD / EDIT PRODUCT DIALOG
+  // =============================
   void _showProductDialog({Map<String, dynamic>? product}) {
     final nameController = TextEditingController(text: product?['name'] ?? '');
     final priceController = TextEditingController(
@@ -52,36 +55,107 @@ class _ProductScreenState extends State<ProductScreen> {
 
     File? selectedImage;
     Uint8List? webImageBytes;
+    bool saving = false;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            Future<void> pickImage() async {
+              final picked = await _picker.pickImage(
+                source: ImageSource.gallery,
+              );
+              if (picked != null) {
+                if (kIsWeb) {
+                  webImageBytes = await picked.readAsBytes();
+                } else {
+                  selectedImage = File(picked.path);
+                }
+                setModalState(() {});
+              }
+            }
+
+            Widget imagePreview() {
+              if (kIsWeb && webImageBytes != null) {
+                return Image.memory(webImageBytes!, fit: BoxFit.cover);
+              }
+              if (!kIsWeb && selectedImage != null) {
+                return Image.file(selectedImage!, fit: BoxFit.cover);
+              }
+              if (product?['imageUrl'] != null) {
+                return Image.network(
+                  'http://localhost:3000${product!['imageUrl']}',
+                  fit: BoxFit.cover,
+                );
+              }
+              return const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.image_outlined, size: 40),
+                    SizedBox(height: 8),
+                    Text('Tap to select image'),
+                  ],
+                ),
+              );
+            }
+
+            Future<void> save() async {
+              final name = nameController.text.trim();
+              final price = double.tryParse(priceController.text);
+              final stock = int.tryParse(stockController.text);
+
+              if (name.isEmpty ||
+                  price == null ||
+                  price <= 0 ||
+                  stock == null ||
+                  stock < 0) {
+                _showSnack('Please fill all fields correctly');
+                return;
+              }
+
+              setModalState(() => saving = true);
+
+              try {
+                if (product == null) {
+                  await _productService.createProduct(
+                    name: name,
+                    price: price,
+                    stock: stock,
+                    image: selectedImage,
+                    webImageBytes: webImageBytes,
+                  );
+                } else {
+                  await _productService.updateProduct(
+                    id: product['id'],
+                    name: name,
+                    price: price,
+                    stock: stock,
+                    image: selectedImage,
+                    webImageBytes: webImageBytes,
+                  );
+                }
+
+                if (!mounted) return;
+                Navigator.pop(context);
+                _showSnack('Product saved successfully');
+                _loadProducts();
+              } catch (_) {
+                _showSnack('Failed to save product');
+              } finally {
+                setModalState(() => saving = false);
+              }
+            }
+
             return AlertDialog(
               title: Text(product == null ? 'Add Product' : 'Edit Product'),
               content: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     GestureDetector(
-                      onTap: () async {
-                        final picked = await _picker.pickImage(
-                          source: ImageSource.gallery,
-                        );
-                        if (picked != null) {
-                          if (kIsWeb) {
-                            final bytes = await picked.readAsBytes();
-                            setModalState(() {
-                              webImageBytes = bytes;
-                            });
-                          } else {
-                            setModalState(() {
-                              selectedImage = File(picked.path);
-                            });
-                          }
-                        }
-                      },
+                      onTap: saving ? null : pickImage,
                       child: Container(
                         height: 160,
                         width: double.infinity,
@@ -90,22 +164,8 @@ class _ProductScreenState extends State<ProductScreen> {
                           color: Colors.grey[200],
                           border: Border.all(color: Colors.grey),
                         ),
-                        child:
-                            kIsWeb && webImageBytes != null
-                                ? Image.memory(
-                                  webImageBytes!,
-                                  fit: BoxFit.cover,
-                                )
-                                : selectedImage != null
-                                ? Image.file(selectedImage!, fit: BoxFit.cover)
-                                : product?['imageUrl'] != null
-                                ? Image.network(
-                                  'http://localhost:3000${product!['imageUrl']}',
-                                  fit: BoxFit.cover,
-                                )
-                                : const Center(
-                                  child: Text('Tap to select image'),
-                                ),
+                        clipBehavior: Clip.antiAlias,
+                        child: imagePreview(),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -132,42 +192,22 @@ class _ProductScreenState extends State<ProductScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: saving ? null : () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    final price = double.tryParse(priceController.text) ?? 0;
-                    final stock = int.tryParse(stockController.text) ?? 0;
-
-                    if (name.isEmpty || price <= 0 || stock < 0) return;
-
-                    if (product == null) {
-                      await _productService.createProduct(
-                        name: name,
-                        price: price,
-                        stock: stock,
-                        image: selectedImage,
-                        webImageBytes: webImageBytes,
-                      );
-                    } else {
-                      await _productService.updateProduct(
-                        id: product['id'],
-                        name: name,
-                        price: price,
-                        stock: stock,
-                        image: selectedImage,
-                        webImageBytes: webImageBytes,
-                      );
-                    }
-
-                    if (mounted) {
-                      Navigator.pop(context);
-                      _loadProducts();
-                    }
-                  },
-                  child: const Text('Save'),
+                  onPressed: saving ? null : save,
+                  child:
+                      saving
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Text('Save'),
                 ),
               ],
             );
@@ -177,6 +217,9 @@ class _ProductScreenState extends State<ProductScreen> {
     );
   }
 
+  // =============================
+  // DELETE PRODUCT
+  // =============================
   Future<void> _deleteProduct(int id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -184,14 +227,15 @@ class _ProductScreenState extends State<ProductScreen> {
           (ctx) => AlertDialog(
             title: const Text('Delete Product'),
             content: const Text(
-              'Are you sure you want to delete this product?',
+              'Are you sure you want to delete this product?\nThis action cannot be undone.',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
                 child: const Text('Cancel'),
               ),
-              TextButton(
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: () => Navigator.pop(ctx, true),
                 child: const Text('Delete'),
               ),
@@ -201,10 +245,14 @@ class _ProductScreenState extends State<ProductScreen> {
 
     if (confirm == true) {
       await _productService.deleteProduct(id);
+      _showSnack('Product deleted');
       _loadProducts();
     }
   }
 
+  // =============================
+  // UI
+  // =============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -222,7 +270,17 @@ class _ProductScreenState extends State<ProductScreen> {
           _loading
               ? const Center(child: CircularProgressIndicator())
               : _products.isEmpty
-              ? const Center(child: Text('No products found'))
+              ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.inventory_2_outlined, size: 64),
+                    SizedBox(height: 12),
+                    Text('No products yet'),
+                    Text('Add your first product to start selling'),
+                  ],
+                ),
+              )
               : SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
