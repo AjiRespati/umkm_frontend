@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:umkm_frontend/core/ux.dart';
 
 import '../services/product_service.dart';
 
@@ -31,14 +32,10 @@ class _ProductScreenState extends State<ProductScreen> {
     try {
       _products = await _productService.fetchProducts();
     } catch (_) {
-      _showSnack('Failed to load products');
+      UX.snack(context, 'Failed to load products');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // =============================
@@ -112,7 +109,7 @@ class _ProductScreenState extends State<ProductScreen> {
                   price <= 0 ||
                   stock == null ||
                   stock < 0) {
-                _showSnack('Please fill all fields correctly');
+                UX.snack(context, 'Please fill all fields correctly');
                 return;
               }
 
@@ -140,10 +137,10 @@ class _ProductScreenState extends State<ProductScreen> {
 
                 if (!mounted) return;
                 Navigator.pop(context);
-                _showSnack('Product saved successfully');
+                UX.snack(context, 'Product saved successfully');
                 _loadProducts();
               } catch (_) {
-                _showSnack('Failed to save product');
+                UX.snack(context, 'Failed to save product');
               } finally {
                 setModalState(() => saving = false);
               }
@@ -245,7 +242,7 @@ class _ProductScreenState extends State<ProductScreen> {
 
     if (confirm == true) {
       await _productService.deleteProduct(id);
-      _showSnack('Product deleted');
+      UX.snack(context, 'Product deleted');
       _loadProducts();
     }
   }

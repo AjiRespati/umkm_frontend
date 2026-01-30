@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:umkm_frontend/core/ux.dart';
 import 'package:umkm_frontend/screens/sales_history_screen.dart';
 
 import '../services/product_service.dart';
@@ -35,9 +36,7 @@ class _SaleScreenState extends State<SaleScreen> {
       _products = await _productService.fetchProducts();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load products: $e')));
+        UX.error(context, e);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -58,18 +57,14 @@ class _SaleScreenState extends State<SaleScreen> {
         qty: qty,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sale recorded successfully')),
-      );
+      UX.snack(context, 'Sale recorded successfully');
 
       _qtyController.clear();
       _selectedProduct = null;
 
       await _loadProducts();
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Sale failed: $e')));
+      UX.error(context, e);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

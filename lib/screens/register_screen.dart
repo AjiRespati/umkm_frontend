@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:umkm_frontend/core/ux.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 
@@ -42,11 +43,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
 
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful! Please log in.'),
-          ),
-        );
+        UX.snack(context, 'Registration successful! Please log in.');
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const LoginScreen()),

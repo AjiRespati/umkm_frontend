@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:umkm_frontend/core/ux.dart';
 
 import '../services/report_service.dart';
 
@@ -34,15 +35,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       _monthlySales = await _reportService.getMonthlySales();
       _lowStock = await _reportService.getLowStockAlerts();
       _largeSales = await _reportService.getLargeSalesAlerts();
-    } catch (_) {
-      _showSnack('Failed to load dashboard');
+    } catch (e) {
+      UX.snack(context, "Failed to load dashboard");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   // =============================

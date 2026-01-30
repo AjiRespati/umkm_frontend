@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:umkm_frontend/core/ux.dart';
 
 import '../services/sale_service.dart';
 
@@ -27,9 +28,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       _sales = await _saleService.fetchSales();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load sales: $e')),
-        );
+        UX.error(context, e);
       }
     } finally {
       if (mounted) setState(() => _loading = false);

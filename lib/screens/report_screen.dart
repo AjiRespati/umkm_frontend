@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:umkm_frontend/core/ux.dart';
 
 import '../services/report_service.dart';
 
@@ -34,16 +35,10 @@ class _ReportScreenState extends State<ReportScreen> {
       _lowStock = await _reportService.getLowStockAlerts();
       _largeSales = await _reportService.getLargeSalesAlerts();
     } catch (_) {
-      _showSnack('Failed to load reports');
+      UX.snack(context, 'Failed to load reports');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
   }
 
   // =============================
